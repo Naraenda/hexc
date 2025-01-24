@@ -1,0 +1,93 @@
+Mind's Reflection
+// stack: entity
+Compass' Purification
+// stack: vec
+Mind's Reflection
+// stack: vec, entity
+Compass' Purification II
+// stack: vec, vec
+Subtractive Distillation
+// stack: vec
+Length Purification
+Reveal
+// stack: num
+Numerical Reflection: 1.5
+Division Distillation
+// stack: num, num
+
+// OPTIONAL: pekhui integration
+Mind's Reflection
+// stack: num, num, entity
+Gulliver's Purification
+// stack: num, num, num
+Multiplicative Distillation
+// stack: num, num
+
+// if eye foot dist <= 1.5
+Minimus Distillation
+// stack: bool
+
+{
+    // load offhand iota, store to entity
+
+    Mind's Reflection
+    // stack: entity
+    Compass' Purification
+    // stack:  vector
+    Mind's Reflection
+    // stack: vector, entity
+    Alidade's Purification
+    // stack: vector, vector
+    Scout's Distillation
+    Reveal
+    // stack: entity
+
+    Scribe's Reflection
+    Reveal
+    // stack: entity, any
+    Chronicler's Gambit
+    // stack: 
+}
+// stack: bool, [pattern]
+{
+    // load iota from entity, store to offhand
+
+    // stack: 
+    Mind's Reflection
+    // stack: entity
+    Compass' Purification
+    // stack: vec
+    Numerical Reflection: 4
+    // stack: vec, num
+    Zone Distillation: Item
+    // stack: [entity]
+    Speaker's Decomposition
+    // stack: [entity], entity
+    Bookkeeper's Gambit: v-
+    Reveal
+    // stack: entity
+
+    Mind's Reflection
+    // stack: entity, entity
+    Compass' Purification
+    // stack: entity, vector
+    Mind's Reflection
+    // stack: entity, vector, entity
+    Alidade's Purification
+    // stack: entity, vector, vector
+    Scout's Distillation
+    Reveal
+    // stack: entity, entity
+
+    Chronicler's Purification
+    Reveal
+    // stack: entity, any
+
+    Craft Artifact
+    // stack:
+}
+// stack: bool, [pattern], [pattern]
+Augur's Exaltation
+// stack: [pattern]
+Hermes' Gambit
+// stack:
