@@ -1,5 +1,5 @@
 local hex    = require("hexlib.common")
-local hexnum = require("hexlib.num")
+local numgen = require("hexlib.numgen")
 
 --- @alias symbolRegistry table<string,table<string, string>>
 --- reads a symbol registry (JSON) and returns a table
@@ -147,6 +147,9 @@ local function generateMaskPattern(mask)
 end
 
 local function compileHexFromTokens(tokens, registry)
+    local hex = {}
+    local hexLength = 0
+
     local position = 1
     while position <= #tokens do
         local token = tokens[position]
@@ -199,16 +202,28 @@ local function compileHexFromTokens(tokens, registry)
         -- handle argument of 'number'
         if name == "number" then
             position = position + 1
-            pattern  = hexnum.findNumPattern(tonumber(tokens[position])).angles
+            local number = tonumber(tokens[position])
+            if number == nil then
+                error("Invalid number: " .. tokens[position])
+            end
+            pattern  = numgen():find(number)
         end
 
         if pattern == nil then
             print("Could not find pattern for " .. token)
         end
 
+        hexLength = hexLength + 1
+        hex[hexLength] = {
+            startDir = "EAST",
+            angles = pattern,
+        }
+
         ::next_token::
         position = position + 1
     end
+
+    return hex
 end
 
 --- builds a hex iota from a list of strings describing
@@ -272,6 +287,7 @@ local function readLinesFromFile(path)
 
     return lines
 end
+
 --- read everything from a file
 ---
 --- @param  path string

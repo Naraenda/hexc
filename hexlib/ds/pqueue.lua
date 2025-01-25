@@ -36,13 +36,12 @@ setmetatable(
   }
 )
 
-
+--- initialization, e.g.
+--- ```lua
+--- PriorityQueue = require("priority_queue")
+--- pq = PriorityQueue()
+--- ```
 function pqueue:initialize()
-  --[[  Initialization.
-    Example:
-        PriorityQueue = require("priority_queue")
-        pq = PriorityQueue()
-    ]]--
   self.heap_val = {}
   self.heap_pri = {}
   self.current_size = 0
@@ -56,8 +55,8 @@ function pqueue:size()
   return self.current_size
 end
 
+--- swim up on the tree and fix the order heap property.
 function pqueue:swim()
-  -- Swim up on the tree and fix the order heap property.
   local heap_val = self.heap_val
   local heap_pri = self.heap_pri
   local floor = floor
@@ -73,21 +72,18 @@ function pqueue:swim()
   end
 end
 
+--- put an item on the queue.
+--- @param v any the item to be stored
+--- @param p number the priority of the item
 function pqueue:put(v, p)
-  --[[ Put an item on the queue.
-    Args:
-        v: the item to be stored
-        p(number): the priority of the item
-    ]]--
-  --
   self.current_size = self.current_size + 1
   self.heap_val[self.current_size] = v
   self.heap_pri[self.current_size] = p
   self:swim()
 end
 
+--- sink down on the tree and fix the order heap property.
 function pqueue:sink()
-  -- Sink down on the tree and fix the order heap property.
   local size = self.current_size
   local heap_val = self.heap_val
   local heap_pri = self.heap_pri
@@ -115,6 +111,8 @@ function pqueue:min_child(i)
   end
 end
 
+--- remove and return the bottom priority item
+--- @return any, number
 function pqueue:cull()
     local heap_val = self.heap_val
     local heap_pri = self.heap_pri
@@ -125,8 +123,9 @@ function pqueue:cull()
     return retval, retprio
 end
 
+--- remove and return the top priority item
+--- @return any, number
 function pqueue:pop()
-  -- Remove and return the top priority item
   local heap_val = self.heap_val
   local heap_pri = self.heap_pri
   local retval, retprio = heap_val[1], heap_pri[1]
@@ -137,8 +136,9 @@ function pqueue:pop()
   return retval, retprio
 end
 
+--- return the top priority item
+--- @return any, number
 function pqueue:peek()
-  -- return the top priority item
   return self.heap_val[1], self.heap_pri[1]
 end
 

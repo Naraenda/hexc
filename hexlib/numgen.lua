@@ -1,6 +1,41 @@
 local hex     = require("hexlib.common")
 local pqueue  = require("hexlib.ds.pqueue")
-local grid    = require("hexlib.grid")
+local lattice = require("hexlib.lattice")
+
+-- literal number path finding using :
+-- * A* search algorithmand heuristic via memoization,
+-- * position indexing on triangular lattice,
+-- * consistent heuristic, and
+-- * memoization to keep the heuristic cheap
+--
+-- A* is applicable in this search problem as we can
+-- use the number of operations as the cost function
+-- of an path. to reject self colissions in the path
+-- we keep track of drawn edges (as oposed to its
+-- vertices), see 'hexlib.trilattice'.
+--
+-- an important part for efficient use of A*, that is
+-- A* is guaranteed to find an optimal path without
+-- processing a node more than once, is to have a
+-- heuristic that satisfies 'h(x) <= d(x, y) + h(y)',
+-- where 'h' is the heuristic and 'd' the distance.
+--
+-- the problem is that this is non trivial from just
+-- the current target value and current value. in-
+-- stead, if we reason from our target state, we
+-- can guarantee that any derivation from the in-
+-- verse number modifier is at least that many steps
+-- away. e.g. to get to 100, we can do +1 from 99,
+-- +5 from 95, and *2 from 50. we then recurse until
+-- the heuristic table is sufficiently filled: i.e.
+-- do the same inverse of the operations on 99, 95,
+-- and 50.
+--
+-- with the heuristic table we can lookup the least
+-- number of operations needed to reach the target.
+-- of course the problem of self-collisions may
+-- make this number over optimistic, but that's the
+-- woes of pathfinding :)
 
 --- @class hex.numgen
 --- # Target
@@ -8,15 +43,15 @@ local grid    = require("hexlib.grid")
 --- @field isFloating      boolean
 --- @field epsilon         number
 --- # Graph structure
---- @field nodeParent      number[]         index of parent node
---- @field nodeValue       number[]         value of node
---- @field nodeAngle       hex.angle[]      angle of node
---- @field nodePos         hex.grid.coord[] absolute position of node
---- @field nodeDepth       number[]         length of described path
---- @field nodeNumChilds   number[]         number of child nodes
+--- @field nodeAngle       hex.angle[]        angle of node
+--- @field nodeDepth       number[]           length of described path
+--- @field nodeDir         hex.direction[]    direction to a node
+--- @field nodeNumChilds   number[]           number of child nodes
+--- @field nodeParent      number[]           index of parent node
+--- @field nodePos         hex.lattice.edge[] absolute position of node
+--- @field nodeValue       number[]           value of node
 --- # A* data
---- @field numberOfNodes   number           total number of nodes
---- @field maxFrontierSize number
+--- @field numberOfNodes   number total number of nodes
 --- @field heuristicTable  table<number, number>
 ---
 local numgen  = {}
@@ -34,29 +69,30 @@ end
 
 --- resets the state of this numgen instance
 function numgen:reset()
+    self.heuristicTable  = {}
     self.nodeAngle       = {}
     self.nodeDepth       = {}
+    self.nodeDir         = {}
+    self.nodeNumChilds   = {}
+    self.nodeNumChilds   = {}
     self.nodeParent      = {}
     self.nodePos         = {}
     self.nodeValue       = {}
-    self.nodeNumChilds   = {}
-    self.nodeNumChilds   = {}
-    self.heuristicTable  = {}
-    self.maxFrontierSize = 8192 * 128
 end
 
 --- sets a node
 --- @param nodeId    number
 --- @param parentId  number?
---- @param pos       hex.grid.coord?
+--- @param pos       hex.lattice.edge?
 --- @param angle     hex.angle?
 --- @param value     number?
 --- @param depth     number?
 --- @param numChilds number?
-function numgen:_setNode(nodeId, parentId, pos, angle, value, depth, numChilds)
+function numgen:_setNode(nodeId, parentId, pos, dir, angle, value, depth, numChilds)
     --- @format disable
     self.nodeAngle    [nodeId] = angle
     self.nodeDepth    [nodeId] = depth
+    self.nodeDir      [nodeId] = dir
     self.nodeNumChilds[nodeId] = numChilds
     self.nodeParent   [nodeId] = parentId
     self.nodePos      [nodeId] = pos
@@ -67,37 +103,27 @@ end
 --- @param nodeId number
 function numgen:_noSelfIntersect(nodeId, childPos)
     -- localize frequently accessed fields ands functions
-    local isCollision = grid.isEqualGridEdge -- localize this because it is a library function
     local nodePosList = self.nodePos
     local nodeParList = self.nodeParent
-
-    local nodePos       = nodePosList[nodeId]
-    local ancestorId    = nodeId
-    local ancestorParId = nodeId and nodeParList[ancestorId] or nil
+    local isCollision = lattice.isEq
 
     -- traverse path to root to check for self intersection
-    while ancestorId ~= nil and nodeParList[ancestorId] ~= nil do
-        if isCollision(
-                nodePosList[ancestorId],
-                nodePosList[ancestorParId],
-                nodePos,
-                childPos)
-        then
+    while nodeId ~= nil do
+        if isCollision(nodePosList[nodeId], childPos) then
             return false
         end
-        ancestorId    = ancestorParId
-        ancestorParId = nodeParList[ancestorParId]
+        nodeId = nodeParList[nodeId]
     end
     return true
 end
 
 --- @type table<hex.angle, fun(x: number): number>
 local _angleNumModifiers = {
-    --[[ (1) hex.ANGLES.A ]] function(x) return x * 2 end,
-    --[[ (2) hex.ANGLES.Q ]] function(x) return x + 5 end,
-    --[[ (3) hex.ANGLES.W ]] function(x) return x + 1 end,
-    --[[ (4) hex.ANGLES.E ]] function(x) return x + 10 end,
-    --[[ (5) hex.ANGLES.D ]] function(x) return x / 2 end,
+    --[[ (1) A ]] function(x) return x * 2 end,
+    --[[ (2) Q ]] function(x) return x + 5 end,
+    --[[ (3) W ]] function(x) return x + 1 end,
+    --[[ (4) E ]] function(x) return x + 10 end,
+    --[[ (5) D ]] function(x) return x / 2 end,
 }
 
 --- explores a node and adds new nodes to internal node list
@@ -107,17 +133,16 @@ local _angleNumModifiers = {
 function numgen:_explore(nodeId)
     local nodeValue   = self.nodeValue[nodeId]
     local nodePos     = self.nodePos[nodeId]
-    local parentId    = self.nodeParent[nodeId]
     local childDepth  = self.nodeDepth[nodeId] + 1
-    local parentPos   = self.nodePos[parentId]
-    local childDirs   = hex.getPossibleDirections(grid.inferDirection(parentPos, nodePos))
-    local adjacentPos = grid.adjacentCoordinates(nodePos)
+    local nodeDir     = self.nodeDir[nodeId]
+    local childDirs   = hex.getPossibleDirections(nodeDir)
+    local adjEdges    = lattice.adjecentEdges(nodeDir, nodePos[1], nodePos[2])
 
     -- find new children
     local childIds    = {}
     local childIdsPos = 1 -- 'childIds' insertion position, saves having to recount it
     for childAngle, childDir in pairs(childDirs) do
-        local childPos = adjacentPos[childDir]
+        local childPos = adjEdges[childDir]
         if self:_noSelfIntersect(nodeId, childPos) then
             local childId    = self.numberOfNodes + 1
             local childValue = _angleNumModifiers[childAngle](nodeValue)
@@ -126,7 +151,7 @@ function numgen:_explore(nodeId)
                 goto next_child
             end
 
-            self:_setNode(childId, nodeId, childPos, childAngle, childValue, childDepth, 0)
+            self:_setNode(childId, nodeId, childPos, childDir, childAngle, childValue, childDepth, 0)
             childIds[childIdsPos] = childId
             childIdsPos = childIdsPos + 1
 
@@ -145,7 +170,7 @@ function numgen:_cull(nodeId)
     while self.nodeNumChilds[nodeId] <= 0 do
         local parentId = self.nodeParent[nodeId]
         self.nodeNumChilds[parentId] = self.nodeNumChilds[parentId] - 1
-        self:_setNode(nodeId, nil, nil, nil, nil, nil, nil)
+        self:_setNode(nodeId)
         nodeId = parentId
     end
 end
@@ -269,10 +294,6 @@ function numgen:_astar(startId)
             end
 
             frontier:put(nodeId, self.nodeDepth[nodeId] + self:_estimate(nodeId))
-
-            -- if frontier:size() > self.maxFrontierSize then
-            --     self:_cull(frontier:cull())
-            -- end
         end
     until frontier:empty()
     error("Could not find path to resolve number!")
@@ -282,28 +303,42 @@ end
 --- @return number
 function numgen:_zeroPath()
     local clock  = { hex.ANGLES.A, hex.ANGLES.Q }
-    local coords = {
-        { -1, 0,  0 }, -- WEST
-        { -1, 0,  1 }, -- SOUTH_WEST
-        { 0,  0,  0 }, -- ORIGIN
-        { -1, -1, 1 }, -- NORTH_WEST
-        { -1, 0,  1 }, -- WEST
-        { 0,  0,  0 }, -- ORIGIN
+    local dirs = {
+        hex.DIRECTIONS.SOUTH_EAST,
+        hex.DIRECTIONS.NORTH_EAST,
+        hex.DIRECTIONS.NORTH_WEST,
+        hex.DIRECTIONS.SOUTH_WEST,
+        hex.DIRECTIONS.EAST
+    }
+    local coord = {
+        { 0, 0,  -1 },
+        { 1, -1, 1 },
+        { 0, 1,  -1 },
+        { 0, 0,  1 },
+        { 0, 0,  0 },
     }
     if self.valueTarget < 0 then
         clock = { hex.ANGLES.D, hex.ANGLES.E }
-        coords[2], coords[4] = coords[4], coords[2]
         self.valueTarget = -self.valueTarget
+        dirs = {
+            hex.DIRECTIONS.NORTH_EAST,
+            hex.DIRECTIONS.SOUTH_EAST,
+            hex.DIRECTIONS.SOUTH_WEST,
+            hex.DIRECTIONS.NORTH_WEST,
+            hex.DIRECTIONS.EAST
+        }
+        error("kjhakhhfkwa")
     end
-    local angles   = { nil, nil, clock[1], clock[2], clock[1], clock[1], }
+
+    local angles   = { nil, clock[1], clock[2], clock[1], clock[1], }
     local parentId = nil
-    for i = 1, 6, 1 do
-        self:_setNode(i, parentId, coords[i], angles[i], 0, i, 1)
+    for i = 1, 5, 1 do
+        self:_setNode(i, parentId, coord[i], dirs[i], angles[i], 0, i, 1)
         parentId = i
     end
-    self.nodeNumChilds[6] = 0
-    self.numberOfNodes = 6
-    return 6
+    self.nodeNumChilds[5] = 0
+    self.numberOfNodes = 5
+    return 5
 end
 
 --- reconstructs a path from a node
@@ -311,8 +346,8 @@ end
 --- @return string
 function numgen:_buildPath(nodeId)
     local chars = {}
-    while nodeId > 2 do
-        chars[self.nodeDepth[nodeId] - 2] = hex.ANGLE_NAMES[self.nodeAngle[nodeId]]
+    while nodeId > 1 do
+        chars[self.nodeDepth[nodeId] - 1] = hex.ANGLE_NAMES[self.nodeAngle[nodeId]]
         nodeId = self.nodeParent[nodeId]
     end
     return table.concat(chars)
@@ -325,6 +360,7 @@ function numgen:find(number)
     self.valueTarget = number
     self.isFloating  = math.floor(number) ~= number
     self.precision   = 1
+    print("Building heuristic")
     if self.isFloating then
         self.epsilon   = 0.0
         self.precision = 32
@@ -337,7 +373,6 @@ function numgen:find(number)
         self:_buildHeuristic(128)
     end
 
-    print("Building heuristic")
     print("Starting search")
     local startId = self:_zeroPath()
     local finalId = self:_astar(startId)
