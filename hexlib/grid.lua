@@ -12,35 +12,29 @@ local grid = {}
 --- @field y number
 --- @field z number
 
---- @class hex.num.node
---- @field position  hex.grid.coord
---- @field value     number
---- @field depth     number
---- @field parent    hex.num.node?
---- @field angle     hex.direction?
-
 --- @param p hex.grid.coord position
 --- @return table<hex.direction, hex.grid.coord>
 function grid.adjacentCoordinates(p)
+    --- @format disable
     return {
-        [hex.DIRECTIONS.NORTH_WEST] = { x = p.x - (1 - p.z), y = p.y - (1 - p.z), z = (1 - p.z) },
-        [hex.DIRECTIONS.NORTH_EAST] = { x = p.x + p.z, y = p.y - (1 - p.z), z = (1 - p.z) },
-        [hex.DIRECTIONS.EAST]       = { x = p.x + 1, y = p.y, z = p.z },
-        [hex.DIRECTIONS.SOUTH_EAST] = { x = p.x + p.z, y = p.y + p.z, z = (1 - p.z) },
-        [hex.DIRECTIONS.SOUTH_WEST] = { x = p.x - (1 - p.z), y = p.y + p.z, z = (1 - p.z) },
-        [hex.DIRECTIONS.WEST]       = { x = p.x - 1, y = p.y, z = p.z },
+        [hex.DIRECTIONS.NORTH_WEST] = { p[1] - (1 - p[3]), p[2] - (1 - p[3]), (1 - p[3]) },
+        [hex.DIRECTIONS.NORTH_EAST] = { p[1] + p[3]      , p[2] - (1 - p[3]), (1 - p[3]) },
+        [hex.DIRECTIONS.EAST]       = { p[1] + 1         , p[2]             , p[3]       },
+        [hex.DIRECTIONS.SOUTH_EAST] = { p[1] + p[3]      , p[2] + p[3]      , (1 - p[3]) },
+        [hex.DIRECTIONS.SOUTH_WEST] = { p[1] - (1 - p[3]), p[2] + p[3]      , (1 - p[3]) },
+        [hex.DIRECTIONS.WEST]       = { p[1] - 1         , p[2]             , p[3]       },
     }
 end
 
 --- @param pos hex.grid.coord
 function grid.stringifyGridPos(pos)
-    return "(" .. pos.x .. ", " .. pos.y .. ", " .. pos.z .. ")"
+    return "(" .. pos[1] .. ", " .. pos[2] .. ", " .. pos[3] .. ")"
 end
 
 --- @param a hex.grid.coord
 --- @param b hex.grid.coord
 function grid.isEqualGridPos(a, b)
-    return a.x == b.x and a.y == b.y and a.z == b.z
+    return a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
 end
 
 --- @param a1 hex.grid.coord
@@ -60,13 +54,13 @@ end
 function grid.inferDirection(from, to)
     local heighbors = grid.adjacentCoordinates(from)
     for dir, candidate in pairs(heighbors) do
-        if candidate.x == to.x and candidate.y == to.y and candidate.z == to.z then
+        if candidate[1] == to[1] and candidate[2] == to[2] and candidate[3] == to[3] then
             return dir
         end
     end
 
     error("Could not infer direction from "
-        .. grid.stringifyGridPos(from) .. "to"
+        .. grid.stringifyGridPos(from) .. " to "
         .. grid.stringifyGridPos(to) .. "!")
 end
 

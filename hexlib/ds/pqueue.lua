@@ -118,10 +118,11 @@ end
 function pqueue:cull()
     local heap_val = self.heap_val
     local heap_pri = self.heap_pri
+    local retval, retprio = heap_val[self.current_size], heap_pri[self.current_size]
     -- Remove the last priority item
     heap_val[self.current_size], heap_pri[self.current_size] = nil, nil
     self.current_size = self.current_size - 1
-    self:sink()
+    return retval, retprio
 end
 
 function pqueue:pop()
