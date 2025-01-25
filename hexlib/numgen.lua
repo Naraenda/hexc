@@ -248,10 +248,13 @@ function numgen:_estimate(nodeId)
     if self.isFloating then
         value = math.ceil(value * self.precision) / self.precision
     end
+
+    -- monotonic heuristic
     local heuristic = self.heuristicTable[value]
     if heuristic ~= nil then
         return heuristic
     end
+
     -- fallback heuristic
     if value > self.valueTarget then
         -- value it bigger than target
@@ -262,6 +265,9 @@ function numgen:_estimate(nodeId)
         end
         return steps
     end
+
+    -- bad heuristic that breaks monotonicity but is
+    -- good enough(tm)
     return math.abs(value - self.valueTarget)
 end
 
@@ -285,7 +291,7 @@ function numgen:_astar(startId)
                     return nodeId
                 elseif
                     value <= self.valueTarget * (1 + self.epsilon) and
-                    value >= self.valueTarget * (1 - self.epsilon) 
+                    value >= self.valueTarget * (1 - self.epsilon)
                 then
                     return nodeId
                 end
@@ -364,6 +370,7 @@ function numgen:find(number)
     if self.isFloating then
         self.epsilon   = 0.0
         self.precision = 32
+        -- improve precision, but with epsilon for small numbers
         if math.abs(number) < 1 then
             self.epsilon   = 0.01
             self.precision = 128
